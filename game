@@ -1,189 +1,126 @@
+# coding: utf-8
 # 1 - Import library
 import pygame
 import math
 import random
 from pygame.locals import *
 
+time_teller = pygame.time.get_ticks
+
 # 2 - Initialize the game
 pygame.init()
-width, height = 640, 480
-screen=pygame.display.set_mode((width, height))
-keys = [False, False, False, False]
-playerpos=[100,100]
-acc=[0,0]
-arrows=[]
-badtimer=100
-badtimer1=0
-badguys=[[640,100]]
-healthvalue=194
+pygame.mixer.init()
+width, height = 700, 600
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("打鼩鼬鼱")
+positions_s = [(posx, posy) for posy in [150, 280, 410] for posx in [90, 280, 470]]
+positions_h = [(posx, posy) for posy in [115, 245, 375] for posx in [110, 300, 490]]
+positions_k = [(posx, posy) for posy in [190, 320, 450] for posx in [150, 340, 530]]
+audio_k = [False for x in range(9)]
+shrew_ques = {x: 0 for x in range(9)}
+hammer_on = {x: 0 for x in range(9)}
+player_score = 0
+delayed_time_on_hit = 250
+hold_time_before_hit = 1300
+kissing_time = 400
+heart_rate = 70
 
 # 3 - Load images
-player = pygame.image.load("resources/images/dude.png")
-grass = pygame.image.load("resources/images/grass.png")
-castle = pygame.image.load("resources/images/castle.png")
-arrow = pygame.image.load("resources/images/bullet.png")
-badguyimg1 = pygame.image.load("resources/images/badguy.png")
-badguyimg=badguyimg1
-healthbar = pygame.image.load("resources/images/healthbar.png")
-health = pygame.image.load("resources/images/health.png")
-gameover = pygame.image.load("resources/images/gameover.png")
-youwin = pygame.image.load("resources/images/youwin.png")
+bg = pygame.image.load("resources/images/background.jpg")
+bg = pygame.transform.scale(bg, (width, height))
+raw_hole = pygame.image.load("resources/images/hole.png")
+raw_shrew = pygame.image.load("resources/images/shrew.png")
+raw_hammer = pygame.image.load("resources/images/hammer.png")
+raw_heart = pygame.image.load("resources/images/heart.png")
+hole = pygame.transform.scale(raw_hole, (150, 150))
+shrew = pygame.transform.scale(raw_shrew, (150, 150))
+hammer = pygame.transform.scale(raw_hammer, (100, 100))
+heart = pygame.transform.scale(raw_heart, (25, 25))
+
+normal_img = pygame.image.load("resources/images/594x600.png")
+cute_img = pygame.image.load("resources/images/600x582.png")
+shy_img = pygame.image.load("resources/images/600x461.png")
+
+normal = [pygame.transform.scale(normal_img.subsurface((x*594, 0), (594, 600)), (99, 100)) for x in range(2)]
+cute = [pygame.transform.scale(cute_img.subsurface((x*600, 0), (600, 582)), (100, 97)) for x in range(5)]
+shy = [pygame.transform.scale(shy_img.subsurface((x*600, 0), (600, 461)), (140, 108)) for x in range(6)]
+
+hit = pygame.mixer.Sound("resources/audio/hit.ogg")
+hit.set_volume(0.5)
+# score presentation
+font = pygame.font.Font(None, 44)
+survivedtext = font.render(str(player_score), True, (255, 255, 255))
+textRect = survivedtext.get_rect()
+textRect.topright = [635, 15]
 
 # 4 - keep looping through
-running = 1
-exitcode = 0
-while running:
-    badtimer-=1
+while True:
+
     # 5 - clear the screen before drawing it again
     screen.fill(0)
-    # 6 - draw the screen elements
-    for x in range(width/grass.get_width()+1):
-        for y in range(height/grass.get_height()+1):
-            screen.blit(grass,(x*100,y*100))
-    screen.blit(castle,(0,30))
-    screen.blit(castle,(0,135))
-    screen.blit(castle,(0,240))
-    screen.blit(castle,(0,345 ))
-    # 6.1 - Set player position and rotation
-    position = pygame.mouse.get_pos()
-    angle = math.atan2(position[1]-(playerpos[1]+32),position[0]-(playerpos[0]+26))
-    playerrot = pygame.transform.rotate(player, 360-angle*57.29)
-    playerpos1 = (playerpos[0]-playerrot.get_rect().width/2, playerpos[1]-playerrot.get_rect().height/2)
-    screen.blit(playerrot, playerpos1)
-    # 6.2 - Draw arrows
-    for bullet in arrows:
-        index=0
-        velx=math.cos(bullet[0])*10
-        vely=math.sin(bullet[0])*10
-        bullet[1]+=velx
-        bullet[2]+=vely
-        if bullet[1]<-64 or bullet[1]>640 or bullet[2]<-64 or bullet[2]>480:
-            arrows.pop(index)
-        index+=1
-        for projectile in arrows:
-            arrow1 = pygame.transform.rotate(arrow, 360-projectile[0]*57.29)
-            screen.blit(arrow1, (projectile[1], projectile[2]))
-    # 6.3 - Draw badgers
-    if badtimer==0:
-        badguys.append([640, random.randint(50,430)])
-        badtimer=100-(badtimer1*2)
-        if badtimer1>=35:
-            badtimer1=35
+    screen.blit(bg, (0,0))
+    # 6 - draw the screen elements -- shrew, hammer & hole
+    for index in range(9):
+        if hammer_on[index]:
+            screen.blit(shrew, positions_s[index])
+            screen.blit(hammer, positions_h[index])
+            if time_teller() - hammer_on[index] > delayed_time_on_hit:
+                shrew_ques[index] = hammer_on[index] = 0
+        elif shrew_ques[index]:
+            screen.blit(shrew, positions_s[index])
+            mid = time_teller() - shrew_ques[index]
+            if mid > hold_time_before_hit + kissing_time: # vanishing shrew
+                shrew_ques[index] = 0
+                audio_k[index] = False
+            elif mid > hold_time_before_hit: # kissing shrew
+                if not audio_k[index]:
+                    #hit.play()# play audio
+                    audio_k[index] = True
+                    heart_rate += 10
+                mid -= hold_time_before_hit
+                screen.blit(
+                    pygame.transform.scale(heart, (25 + mid / 60, 25 + mid / 60)),
+                    (positions_k[index][0], positions_k[index][1]-mid/20))
         else:
-            badtimer1+=5
-    index=0
-    for badguy in badguys:
-        if badguy[0]<-64:
-            badguys.pop(index)
-        badguy[0]-=7
-        # 6.3.1 - Attack castle
-        badrect=pygame.Rect(badguyimg.get_rect())
-        badrect.top=badguy[1]
-        badrect.left=badguy[0]
-        if badrect.left<64:
-            healthvalue -= random.randint(5,20)
-            badguys.pop(index)
-        # 6.3.3 - Next bad guy
-        #6.3.2 - Check for collisions
-        index1=0
-        for bullet in arrows:
-            bullrect=pygame.Rect(arrow.get_rect())
-            bullrect.left=bullet[1]
-            bullrect.top=bullet[2]
-            if badrect.colliderect(bullrect):
-                acc[0]+=1
-                badguys.pop(index)
-                arrows.pop(index1)
-            index1+=1
+            screen.blit(hole, positions_s[index])
+    # draw girl
+    survivedtext = font.render(u'♥  {}'.format(heart_rate), True, (255, 0, 0))
+    screen.blit(survivedtext, (155, 70))
+    if heart_rate < 140:
+        screen.blit(normal[time_teller()/500 % 2], (50, 30))
+    elif heart_rate < 210:
+        screen.blit(cute[time_teller()/500 % 5], (50, 30))
+    else:
+        screen.blit(shy[time_teller()/500 % 6], (40, 25))
 
-        index+=1
-    for badguy in badguys:
-        screen.blit(badguyimg, badguy)
-    # 6.4 - Draw clock
-    font = pygame.font.Font(None, 24)
-    survivedtext = font.render(str((90000-pygame.time.get_ticks())/60000)+":"+str((90000-pygame.time.get_ticks())/1000%60).zfill(2), True, (0,0,0))
-    textRect = survivedtext.get_rect()
-    textRect.topright=[635,5]
-    screen.blit(survivedtext, textRect)
-    # 6.5 - Draw health bar
-    screen.blit(healthbar, (5,5))
-    for health1 in range(healthvalue):
-        screen.blit(health, (health1+8,8))
+    # generate shrew
+    if random.random() < 0.08:
+        random_num = random.randint(0, 8)
+        if not shrew_ques[random_num]:
+            shrew_ques[random_num] = time_teller()
+
 
     # 7 - update the screen
-    pygame.display.flip()
+    # screen.blit(shrew,positions_s[0])
+    #screen.blit(cute, (150,150))
+
     # 8 - loop through the events
     for event in pygame.event.get():
         # check if the event is the X button
-        if event.type==pygame.QUIT:
+        if event.type == pygame.QUIT:
             # if it is quit the game
             pygame.quit()
             exit(0)
         elif event.type == pygame.KEYDOWN:
-            if event.key==K_w:
-                keys[0]=True
-            elif event.key==K_a:
-                keys[1]=True
-            elif event.key==K_s:
-                keys[2]=True
-            elif event.key==K_d:
-                keys[3]=True
-        elif event.type == pygame.KEYUP:
-            if event.key==pygame.K_w:
-                keys[0]=False
-            elif event.key==pygame.K_a:
-                keys[1]=False
-            elif event.key==pygame.K_s:
-                keys[2]=False
-            elif event.key==pygame.K_d:
-                keys[3]=False
-        elif event.type==pygame.MOUSEBUTTONDOWN:
-            position=pygame.mouse.get_pos()
-            acc[1]+=1
-            arrows.append([math.atan2(position[1]-(playerpos1[1]+32),position[0]-(playerpos1[0]+26)),playerpos1[0]+32,playerpos1[1]+32])
-
-        # 9 - Move player
-        if keys[0]:
-            playerpos[1] -= 5
-        elif keys[2]:
-            playerpos[1] += 5
-        if keys[1]:
-            playerpos[0] -= 5
-        elif keys[3]:
-            playerpos[0] += 5
-    #10 - Win/Lose check
-    if pygame.time.get_ticks()>=90000:
-        running=0
-        exitcode=1
-    if healthvalue<=0:
-        running=0
-        exitcode=0
-    if acc[1]!=0:
-        accuracy=acc[0]*1.0/acc[1]*100
-    else:
-        accuracy=0
-    # 11 - Win/lose display
-    if exitcode==0:
-        pygame.font.init()
-        font = pygame.font.Font(None, 24)
-        text = font.render("Accuracy: "+str(accuracy)+"%", True, (255,0,0))
-        textRect = text.get_rect()
-        textRect.centerx = screen.get_rect().centerx
-        textRect.centery = screen.get_rect().centery+24
-        screen.blit(gameover, (0,0))
-        screen.blit(text, textRect)
-    else:
-        pygame.font.init()
-        font = pygame.font.Font(None, 24)
-        text = font.render("Accuracy: "+str(accuracy)+"%", True, (0,255,0))
-        textRect = text.get_rect()
-        textRect.centerx = screen.get_rect().centerx
-        textRect.centery = screen.get_rect().centery+24
-        screen.blit(youwin, (0,0))
-        screen.blit(text, textRect)
-    while 1:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit(0)
-        pygame.display.flip()
+            if K_0 < event.key <= K_9:
+                mid = event.key - 49
+                # if shrew being up & not kissing
+                if shrew_ques[mid] and time_teller() - shrew_ques[mid] < hold_time_before_hit:
+                    hit.play()
+                    player_score += 10
+                    shrew_ques[event.key - 49] += delayed_time_on_hit
+                    hammer_on[mid] = time_teller()
+    # present player's score
+    survivedtext = font.render(str(player_score), True, (255, 255, 255))
+    screen.blit(survivedtext, textRect)
+    pygame.display.flip()
